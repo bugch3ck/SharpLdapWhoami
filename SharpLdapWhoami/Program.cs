@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Text;
 using System.DirectoryServices.Protocols;
 using System.DirectoryServices.ActiveDirectory;
-using System.Net;
 using System.Security.Principal;
 
 /*
@@ -32,9 +31,9 @@ namespace SharpLdapWhoami
 
     }
 
-    struct GroupInfo
+    struct PrincipalInfo
     {
-        public GroupInfo(string dn, string name, string sid)
+        public PrincipalInfo(string dn, string name, string sid)
         {
             DN = dn;
             Name = name;
@@ -44,7 +43,7 @@ namespace SharpLdapWhoami
         public string Name { get; set; }
         public string Sid { get; set; }
 
-        public GroupInfo(SearchResultEntry entry)
+        public PrincipalInfo(SearchResultEntry entry)
         {
             DN = entry.Attributes["distinguishedName"][0].ToString();
             Name = entry.Attributes["sAMAccountName"][0].ToString();
@@ -161,14 +160,14 @@ Credits to
             return parsedArgs;
         }
 
-        static private void OutputResultTable(string title, string[] headings, GroupInfo entry)
+        static private void OutputResultTable(string title, string[] headings, PrincipalInfo entry)
         {
-            Dictionary<string, GroupInfo> list = new Dictionary<string, GroupInfo>();
+            Dictionary<string, PrincipalInfo> list = new Dictionary<string, PrincipalInfo>();
             list.Add(entry.DN, entry);
             OutputResultTable(title, headings, list);
         }
 
-        static private void OutputResultTable(string title, string[] headings, Dictionary<string, GroupInfo> list)
+        static private void OutputResultTable(string title, string[] headings, Dictionary<string, PrincipalInfo> list)
         {
             Console.WriteLine();
             Console.WriteLine(title.ToUpper());
@@ -181,7 +180,7 @@ Credits to
                 headings[2].Length 
             };
 
-            foreach (GroupInfo entry in list.Values)
+            foreach (PrincipalInfo entry in list.Values)
             {
                 maxWidth[0] = (entry.Name.Length > maxWidth[0]) ? entry.Name.Length : maxWidth[0];
                 maxWidth[1] = (entry.Sid.Length > maxWidth[1]) ? entry.Sid.Length : maxWidth[1];
@@ -201,13 +200,13 @@ Credits to
                     "".PadRight(maxWidth[2], '=')
                 )
             );
-            foreach (GroupInfo groupInfo in list.Values)
+            foreach (PrincipalInfo entry in list.Values)
             {
                 Console.WriteLine(
                     String.Format("{0} {1} {2}",
-                        groupInfo.Name.PadRight(maxWidth[0]),
-                        groupInfo.Sid.PadRight(maxWidth[1]),
-                        groupInfo.DN.PadRight(maxWidth[2])
+                        entry.Name.PadRight(maxWidth[0]),
+                        entry.Sid.PadRight(maxWidth[1]),
+                        entry.DN.PadRight(maxWidth[2])
                     )
                 );
             }
@@ -229,14 +228,14 @@ Credits to
             }
         }
 
-        private static void AddGroupsInGroups(Dictionary<string,GroupInfo>groups, LdapConnection c, SearchRequest searchRequest)
+        private static void AddGroupsInGroups(Dictionary<string,PrincipalInfo>groups, LdapConnection c, SearchRequest searchRequest)
         {
             // Get group information
             SearchResponse searchResponse = (SearchResponse)c.SendRequest(searchRequest);
 
             for (int i = 0; i < searchResponse.Entries.Count; i++)
             {
-                GroupInfo groupInfo = new GroupInfo(searchResponse.Entries[i]);
+                PrincipalInfo groupInfo = new PrincipalInfo(searchResponse.Entries[i]);
                 if (groups.ContainsKey(groupInfo.DN) == false)
                 {
                     groups.Add(groupInfo.DN, groupInfo);
@@ -261,7 +260,7 @@ Credits to
         static int Main(string[] args)
         {
             ParsedArgs = ParseArgs(args);
-            Dictionary<string, GroupInfo> groups = new Dictionary<string, GroupInfo>();
+            Dictionary<string, PrincipalInfo> groups = new Dictionary<string, PrincipalInfo>();
 
             if (ParsedArgs.Valid == false)
             {
@@ -362,7 +361,7 @@ Credits to
             SecurityIdentifier userSid = new SecurityIdentifier( (byte[])searchResponse.Entries[0].Attributes["objectSid"][0], 0);
             string userDN = searchResponse.Entries[0].Attributes["distinguishedName"][0].ToString();
             string userDomainSid = userSid.AccountDomainSid.ToString();
-            string userPrimaryGroup = searchResponse.Entries[0].Attributes["primaryGroupID"][0].ToString();
+            string userPrimaryGroupID = searchResponse.Entries[0].Attributes["primaryGroupID"][0].ToString();
 
             if ((ParsedArgs.User == false) && (ParsedArgs.Group == false))
             {
@@ -370,20 +369,20 @@ Credits to
             }
             else if (ParsedArgs.User) 
             {
-                OutputResultTable("User information", new string[] { "User Name", "SID", "Distinguished Name" }, new GroupInfo(userDN, userName, userSid.ToString()));
+                OutputResultTable("User information", new string[] { "User Name", "SID", "Distinguished Name" }, new PrincipalInfo(userDN, userName, userSid.ToString()));
             }
 
             // Get primary group information
             searchRequest = new SearchRequest
                 (
                 baseDN,
-                $"(&(objectClass=group)(objectSid={userDomainSid}-{userPrimaryGroup}))",
+                $"(&(objectClass=group)(objectSid={userDomainSid}-{userPrimaryGroupID}))",
                 System.DirectoryServices.Protocols.SearchScope.Subtree,
                 new string[] { "sAMAccountName", "objectSid", "distinguishedName" }
                 );
             searchResponse = (SearchResponse)c.SendRequest(searchRequest);
 
-            GroupInfo primaryGroupInfo = new GroupInfo(searchResponse.Entries[0]);
+            PrincipalInfo primaryGroupInfo = new PrincipalInfo(searchResponse.Entries[0]);
 
             groups.Add(primaryGroupInfo.DN, primaryGroupInfo);
 
